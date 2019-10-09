@@ -37,7 +37,7 @@ sampleSize = 29000
         r = readavailable(ser) # empty buffer
 
         # write 'p' to print buffer to serial port
-        write(ser, "b'a'")
+        write(ser, "b'p'")
         while bytesavailable(ser) < 1
             continue
         end
@@ -46,8 +46,8 @@ sampleSize = 29000
         global bc = ""
         # exit loop when serial buffer is empty
         while true
-            if bytesavailable(ser) < 2
-                sleep(0.01)
+            if bytesavailable(ser) < 1
+                sleep(0.005)
 
                 if bytesavailable(ser) < 1
                     break
@@ -70,13 +70,6 @@ sampleSize = 29000
             end
         end
 
-        write(ser, "b'v'")
-        while bytesavailable(ser) < 1
-            continue
-        end
-        sleep(0.1)
-        r = readavailable(ser) # empty buffer
-
         # write 'p' to print buffer to serial port
         write(ser, "b'a'")
         while bytesavailable(ser) < 1
@@ -87,8 +80,8 @@ sampleSize = 29000
         global bc = ""
         # exit loop when serial buffer is empty
         while true
-            if bytesavailable(ser) < 2
-                sleep(0.01)
+            if bytesavailable(ser) < 1
+                sleep(0.005)
 
                 if bytesavailable(ser) < 1
                     break
@@ -110,6 +103,10 @@ sampleSize = 29000
                 println("Array not expected length...retrying...")
             end
         end
+        print("a1:")
+        println(length(a1))
+        print("a2:")
+        println(length(a2))
 
         # only plot if all values are collected
         if ((length(a1) >= sampleSize)  && (length(a2) >= sampleSize))
