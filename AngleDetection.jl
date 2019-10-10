@@ -2,9 +2,10 @@ using SerialPorts;
 using PyPlot;
 using FFTW
 
-DIST = 0.010;       #Distance between the centres of the receivers, to be measured
+DIST = 0.019;       #Distance between the centres of the receivers, to be measured
 FREQ = 40000;       #f0
-THRESHOLD = 1.8e8;     #THRESHOLD of the main lobe, to be adjusted from real-world values
+THRESHOLD = 1.9e9;     #THRESHOLD of the main lobe, to be adjusted from real-world values
+THRESHOLD1 = 2e8;
 SAMPLES = 29000;
 sampleSize = 29000   # How many samples we've taken to get full range
 C = 343;            #speed o sound sonic
@@ -12,6 +13,7 @@ SMPL_RATE = 500000; #Sample rate
 dt = 1/500000;
 t_max = (SAMPLES/SMPL_RATE)-dt;
 t = 0:dt:t_max;
+RES = 1400
 
 speed = 343     #Speed of sound in air
 sample_rate = 500000   #Sample rate
@@ -33,10 +35,9 @@ bc = ""
 # turn on interactive mode and create figure
 ion()
 fig = figure(figsize=(10,8))
-# fig2 = figure(figsize=10,8)
+
 # opne serial port and define sample size
 ser = SerialPort("/dev/ttyACM2", 115200)
-sampleSize = 29000
 
 while true
     # write 'c' to sedn chipr and get samples
@@ -103,7 +104,6 @@ while true
 
     # split buffer string into array
     a = split(bc, "\r\n")
-    # println(a)
 
     # convert array of stirng to array of ints
     a2 = zeros(length(a))
@@ -114,9 +114,9 @@ while true
             println("Array not expected length...retrying...")
         end
     end
-    print("a1:")
+    print("length of a1:")
     println(length(a1))
-    print("a2:")
+    print("length of a2:")
     println(length(a2))
 
     # only plot if all values are collected
@@ -140,8 +140,6 @@ while true
         #variables autoadjust to find chirp band
         band = Array{Any}(undef, SAMPLES)
         bandstart1 = (0.05*SAMPLES);
-        #print("helloooooooooooooooooo")
-        #print(typeof(bandstart1))
         bandstop1 = bandstart1+bandstart1;
         bandstop2 = SAMPLES-bandstart1;
         bandstart2 = SAMPLES - 2*bandstart1;
@@ -166,8 +164,6 @@ while true
         mf1 = real(mf1);
         mf2 = ifft(MF2);
         mf2 = real(mf2);
-        # display(plot(abs.(mf1)))
-        # display(plot(abs.(mf2)))
 
         #Get analytic and baseband
         ANA1 = 2 .*MF1;
@@ -177,46 +173,52 @@ while true
         ANA2[neg_freq_range].=0;
         ana1 = ifft(ANA1);
         ana2 = ifft(ANA2);
-        # display(plot(abs.(ana1)));
-        # display(plot(abs.(ana2)));
+
         #Get basebanded signals
         j=im;
         bb1 = ana1.*exp.(-j*2*pi*40000*t);    #The basebanded signal from receiver 1
         bb2 = ana2.*exp.(-j*2*pi*40000*t);    #The basebanded signal from receiver 2
-        # display(plot(abs.(bb1)));
-        # display(plot(abs.(bb2)));
-        bb1_comp = bb1 .* r.^2
-        bb2_comp = bb2 .* r.^2
-        # display(plot(angle.(bb1)))
+
+        # Base band compensated signals
+        bb1_comp = bb1.* (r).^2
+        bb2_comp = bb2.* (r).^2
+
         #Peak detection: Uses threshold value to find peak
         #Takes average values to attempt to avoid false positives (check if necessary, may slow code)\
-        lobes1 = zeros(SAMPLES)#The phases for peaks from first receiver, to be filled
-        lobes2 = zeros(SAMPLES);       #The phases for peaks from second receiver, to be filled
+        lobes1 = zeros(SAMPLES)         #The phases for peaks from first receiver, to be filled
+        lobes2 = zeros(SAMPLES);        #The phases for peaks from second receiver, to be filled
         global counter1 = 0;       #Counts main lobes detected in bb1
         global counter2 = 0;       #Counts main lobes detected in bb2
-        #x = SAMPLES-1;
-        #(abs(bb1[i]) > THRESHOLD) &&
-        #ANGLE DOESNT REMAIN CONSTANT AT ALL
+
+
         global increasing = false
+        global inc = 0
         for i in range(1, stop = SAMPLES-1)
             global increasing
             global counter1
+            global inc
             if  (abs.(bb1_comp[i]) < abs.(bb1_comp[i+1]))
                 increasing =true
-            elseif (abs.(bb1_comp[i]) > abs.(bb1_comp[i+1])) && (increasing==true) && abs.(bb1_comp[i]) >THRESHOLD
+                inc+=1
+            elseif (abs.(bb1_comp[i]) > abs.(bb1_comp[i+1])) && (increasing==true) && ((i<4350 && abs.(bb1_comp[i])>THRESHOLD1)||(i>4350 && abs.(bb1_comp[i])>THRESHOLD)) && inc>RES
                 increasing = false
                 counter1 += 1
+                inc = 0
                 lobes1[i] = abs.(bb1_comp[i]);
             end
         end
 
+        global inc = 0
         for i in range(1, stop = SAMPLES-1)
             global increasing
             global counter2
+            global inc
             if  (abs.(bb2_comp[i]) < abs.(bb2_comp[i+1]))
+                inc += 1
                 increasing =true
-            elseif (abs.(bb2_comp[i]) > abs.(bb2_comp[i+1])) && (increasing==true) && abs.(bb2_comp[i]) >THRESHOLD
+            elseif (abs.(bb2_comp[i]) > abs.(bb2_comp[i+1])) && (increasing==true) && ((i<4350 && abs.(bb2_comp[i])>THRESHOLD1)||(i>4350 && abs.(bb2_comp[i])>THRESHOLD)) && inc>RES
                 increasing = false
+                inc =0
                 counter2 += 1
                 lobes2[i] = abs.(bb2_comp[i]);
             end
@@ -258,7 +260,7 @@ while true
         num=1
         for i in indices1
             global num
-            vectors1[num] = bb1_comp[i];
+            vectors1[num] = bb1[i];
             num +=1
             #delta_psi[i] = angle(lobes1[i].*conj(lobes2[i]));
         end
@@ -267,7 +269,7 @@ while true
         num=1
         for i in indices2
             global num
-            vectors2[num] = bb2_comp[i];
+            vectors2[num] = bb2[i];
             num +=1
         end
 
@@ -281,7 +283,7 @@ while true
         #Get athe angles
         angles = Array{Any}(undef, smallest);
         for i in range(1, stop=smallest)
-            angles[i] = (asin.((C/FREQ)*(delta_psi[i])/(2*pi*DIST)))
+            angles[i] = (asin.(((C/FREQ)*(delta_psi[i] +2*pi))/(2*pi*DIST)))
         end
 
         # println(angles)
@@ -293,30 +295,70 @@ while true
 
 
         # plot both received waveform and matched filter response
-        subplot(311)
+        subplot(411)
         cla()
         # ylabel("Voltage (V)")
-        # title("Received signal")
-        plot(r[1:26000], abs.(bb1)[1:26000])
+        title("Received signal matched filter response")
+        plot(r, abs.(bb1))
         # ylim(0, 3.3)
-        plot(r[1:26000], abs.(bb2)[1:26000])
-        subplot(312)
+        plot(r, abs.(bb2))
+        xlim(0,10)
+
+        subplot(412)
         cla()
+        title("Range compensated")
         # ylabel("Voltage (V)")
         # title("Received signal")
-        plot(angle.(bb1_comp.*conj(bb2_comp)))
+        plot(r[1:26000], abs.(bb1_comp)[1:26000])
+        # ylim(0, 3.3)
+        plot(r[1:26000], abs.(bb2_comp)[1:26000])
+        xlim(0,10)
+
+
+        subplot(413)
+        cla()
+        xlabel("distance (m)")
+        title("Phase difference (rads)")
+        plot(r, angle.(bb1.*conj(bb2)))
         # plot(angle.(bb2))
         # plot(angle.(bb1))
-        # ylim(0, 3.3)
 
-        subplot(313)
+        subplot(414)
         cla()
         # xlabel("distance (m)")
         # ylabel("Magnitude")
         # title("Range compensated")
         scatter(x,y)
+
+
+        angles = Array{Any}(undef, smallest);
+        for i in range(1, stop=smallest)
+            angles[i] = (asin.(((C/FREQ)*(delta_psi[i] -2*pi))/(2*pi*DIST)))
+        end
+
+        # println(angles)
+
+        distances = indices1.*(10/SAMPLES) #only uses one transducer
+
+        y = distances.*sin.(angles)
+        x = distances.*cos.(angles)
+        scatter(x,y)
+
+        angles = Array{Any}(undef, smallest);
+        for i in range(1, stop=smallest)
+            angles[i] = (asin.(((C/FREQ)*(delta_psi[i]))/(2*pi*DIST)))
+        end
+
+        # println(angles)
+
+        distances = indices1.*(10/SAMPLES) #only uses one transducer
+
+        y = distances.*sin.(angles)
+        x = distances.*cos.(angles)
+        scatter(x,y)
         xlim(0,10)
         ylim(-2,2)
+
 
     end
 end

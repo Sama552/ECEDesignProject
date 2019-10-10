@@ -217,7 +217,7 @@ sampleSize = 29000
             cla()
             xlabel("distance (m)")
             ylabel("Magnitude")
-            title("Range compensated")
+            title("Matched filter response")
             plot(r, abs.(v_anal1))
             plot(r, abs.(v_anal2))
 
